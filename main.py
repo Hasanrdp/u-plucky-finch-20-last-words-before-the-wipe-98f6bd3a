@@ -31,12 +31,14 @@ def gate_ok(data: bytes) -> bool:
     return 1 <= len(text) <= 200 and text.strip() != ""
 
 
-def verify(path: str, data: bytes) -> None:
-    """Read the file back and check it byte for byte against the pinned line."""
+def verify(path: str, data: bytes) -> bool:
+    """Read the file back and check it byte for byte against the pinned line.
+
+    Returns True only when every check passes; raises SystemExit naming the
+    first check that fails so a bad write can never be reported as success.
+    """
     with open(path, "rb") as handle:
         written = handle.read()
-    if written != data:
-        raise SystemExit("verify failed: file bytes differ from the entry line")
     if len(written) != EXPECTED_BYTES:
         raise SystemExit(
             "verify failed: wrote %d bytes, expected %d"
@@ -45,8 +47,11 @@ def verify(path: str, data: bytes) -> None:
     digest = hashlib.sha256(written).hexdigest()
     if digest != EXPECTED_SHA256:
         raise SystemExit("verify failed: sha256 %s != %s" % (digest, EXPECTED_SHA256))
+    if written != data:
+        raise SystemExit("verify failed: file bytes differ from the entry line")
     if not gate_ok(written):
         raise SystemExit("verify failed: entry does not pass the 1-200 char gate")
+    return True
 
 
 def main(argv) -> int:
@@ -61,7 +66,8 @@ def main(argv) -> int:
         os.makedirs(parent, exist_ok=True)
     with open(out_path, "wb") as handle:
         handle.write(data)
-    verify(out_path, data)
+    if not verify(out_path, data):
+        raise SystemExit("verification failed: written file does not match")
     print("wrote %s (%d bytes, sha256 %s)" % (out_path, len(data), EXPECTED_SHA256[:12]))
     return 0
 
